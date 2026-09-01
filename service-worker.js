@@ -1,0 +1,5 @@
+const CACHE="gymtrack-final-v3-local-images";
+const ASSETS=["./", "./index.html", "./style.css", "./app.js", "./manifest.json", "./icon-192.svg", "./icon-512.svg", "./assets/impins_bara.jpg", "./assets/presa_piept.jpg", "./assets/fluturari_aparat.jpg", "./assets/extensii_cvadriceps.jpg", "./assets/flexii_femurali.jpg", "./assets/cablu_triceps.svg", "./assets/triceps_deasupra.svg", "./assets/helcometru.svg", "./assets/ramat_aparat.svg", "./assets/ramat_cablu.svg", "./assets/fluturari_inverse.svg", "./assets/biceps_ez.svg", "./assets/hammer_curls.svg", "./assets/presa_picioare.svg", "./assets/rdl.svg", "./assets/gambe.svg"];
+self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));self.skipWaiting();});
+self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});
+self.addEventListener("fetch",e=>e.respondWith(caches.match(e.request).then(c=>c||fetch(e.request))));
