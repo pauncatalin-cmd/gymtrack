@@ -6,3 +6,17 @@ Fără zile fixe. Full Body bazat în principal pe aparate cu selector de greuta
 - Corectează calculul volumului: orice serie cu kg și repetări valide este inclusă.
 - Repară automat volumele istorice recalculabile fără să șteargă fb-history.
 - Păstrează istoricul și progresul existent din localStorage.
+
+## Backup și actualizare pe iPhone
+
+1. Deschide aplicația din locul în care vezi istoricul, de exemplu din iconița deja instalată. În **Istoric**, apasă **Exportă backup** și salvează fișierul JSON în **Fișiere**. Verifică dacă îl găsești acolo și notează numărul de antrenamente. Exportul din versiunea precedentă include istoricul, ciorna și ora de pornire. Dacă ai un antrenament în curs, salvează-l înainte de exportul din versiunea veche.
+2. După publicarea update-ului, închide și redeschide aplicația de la aceeași adresă. Verifică numărul de antrenamente, programele și, dacă este cazul, opțiunea **Continuă antrenamentul**.
+3. În versiunea nouă, apasă rotița **Setări** din dreapta sus și alege **Exportă backup**. Pe un alt telefon sau la altă adresă, folosește **Istoric → Importă backup** și verifică rezultatul. Pe iPhone, Safari și aplicația instalată pot avea istorice separate.
+
+Versiunea nouă citește automat `fb-history` și istoricul din vechea cheie `gymtrack-history`. La prima salvare scrie datele într-o singură înregistrare versionată și păstrează cheile originale. Backupul nou include istoricul complet, programele, programul selectat, ciorna, ora de pornire și datele istorice arhivate.
+
+Importul acceptă noul format, exporturile KIP v10 și GymTrack v1 și listele JSON de antrenamente. Adaugă sesiunile lipsă și păstrează versiunile diferite ale aceleiași sesiuni, pentru verificare. Programele cu același ID și conținut diferit sunt păstrate separat. Dacă ambele dispozitive au câte o ciornă diferită, salvează antrenamentul de pe dispozitivul de destinație înainte de import. Ciornele din exporturile v10 sunt arhivate pentru recuperare manuală, deoarece fișierul vechi nu identifică programul lor.
+
+Un fișier de recuperare din capturi poate include un rezumat al perioadei anterioare. Totalurile și progresul sunt afișate împreună cu sesiunile înregistrate după capturi. Calendarul și istoricul afișează sesiunile cu date cunoscute. Rezumatul intră în exporturile ulterioare.
+
+Pentru dezvoltare, rulează `node --test` pentru verificarea compatibilității backupului și a migrării.
