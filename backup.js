@@ -14,7 +14,7 @@ const optional = (value, check) => value == null || check(value);
 const isSetValue = value => value == null || isText(value) || isNumber(value);
 const isSet = value => isObject(value) &&
   ['kg', 'reps', 'rir'].every(key => isSetValue(value[key])) &&
-  optional(value.done, flag => typeof flag === 'boolean');
+  ['done', 'suggested'].every(key => optional(value[key], flag => typeof flag === 'boolean'));
 const isSets = value => Array.isArray(value) && value.every(set => set === null || isSet(set));
 
 function isHistory(value) {
