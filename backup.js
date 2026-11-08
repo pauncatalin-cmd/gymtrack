@@ -21,7 +21,7 @@ function isHistory(value) {
   return Array.isArray(value) && value.every(workout => isObject(workout) &&
     optional(workout.date, isText) && (isText(workout.date) || isTimestamp(workout.timestamp)) &&
     ['duration', 'volume', 'done', 'exerciseCount'].every(key => optional(workout[key], isNumber)) &&
-    optional(workout.timestamp, isTimestamp) &&
+    optional(workout.timestamp, isTimestamp) && optional(workout.energy, isEnergy) &&
     optional(workout.exercises, exercises => Array.isArray(exercises) &&
       exercises.every(exercise => isObject(exercise) && isText(exercise.name) && optional(exercise.sets, isSets))));
 }
@@ -29,7 +29,8 @@ function isHistory(value) {
 function isDraft(value) {
   return isObject(value) && Object.entries(value).every(([index, exercise]) =>
     /^(0|[1-9]\d*)$/.test(index) && isObject(exercise) && isSets(exercise.sets) &&
-    ['done', 'later'].every(key => optional(exercise[key], flag => typeof flag === 'boolean')));
+    ['done', 'later'].every(key => optional(exercise[key], flag => typeof flag === 'boolean')) &&
+    optional(exercise.cardioMinutes, isNumber) && optional(exercise.cardioMode, isText));
 }
 
 function isPrograms(value) {
@@ -48,10 +49,16 @@ function isState(data) {
     isTimestamp(data.activeStart) && isPrograms(data.programs) &&
     data.programs.some(program => program.id === data.activeProgramId) &&
     Array.isArray(data.archive) && data.archive.every(isObject) &&
-    optional(data.recovery, isRecovery);
+    optional(data.recovery, isRecovery) && optional(data.weeklyGoal, goal => isPositiveInteger(goal) && goal <= 21) &&
+    optional(data.weightLog, list => Array.isArray(list) && list.every(isWeight));
 }
 
 const isPositiveInteger = value => Number.isSafeInteger(value) && value > 0;
+const isWeight = value => isObject(value) && isText(value.date) && /^\d{4}-\d{2}-\d{2}$/.test(value.date) &&
+  isNumber(value.kg) && value.kg > 0 && value.kg <= 1000 && isTimestamp(value.recordedAt);
+const isEnergy = value => isObject(value) && value.method === 'met-active-v1' &&
+  ['kcal', 'strengthSeconds', 'cardioSeconds'].every(key => Number.isSafeInteger(value[key]) && value[key] >= 0) &&
+  isNumber(value.bodyKg) && value.bodyKg > 0;
 const isPerformance = value => isObject(value) && isNumber(value.kg) && value.kg > 0 &&
   isPositiveInteger(value.repetitions);
 
@@ -275,9 +282,12 @@ export function planImport(local, incoming, defaults) {
     throw new Error('Acest backup conține un alt rezumat istoric decât cel salvat deja.');
   }
   const recoveryFields = recovery ? {recovery} : {};
+  const fitnessFields = {};
+  if (local.weeklyGoal != null || incoming.weeklyGoal != null) fitnessFields.weeklyGoal = local.weeklyGoal ?? incoming.weeklyGoal;
+  if (local.weightLog || incoming.weightLog) fitnessFields.weightLog = mergeEntries(local.weightLog ?? [], incoming.weightLog ?? []);
   if (incoming.programs && !hasLocalDraft && !local.history.length &&
       fingerprint(local.programs) === fingerprint(defaults)) {
-    return {...incoming, history, archive, ...recoveryFields};
+    return {...incoming, history, archive, ...recoveryFields, ...fitnessFields};
   }
 
   const programs = [...local.programs];
@@ -314,7 +324,7 @@ export function planImport(local, incoming, defaults) {
     throw new Error('Există două antrenamente în curs. Salvează antrenamentul de pe acest dispozitiv, apoi importă din nou.');
   }
 
-  return {history, programs, activeProgramId, draft, activeStart, archive, ...recoveryFields};
+  return {history, programs, activeProgramId, draft, activeStart, archive, ...recoveryFields, ...fitnessFields};
 }
 
 export function historyTotals(history, recovery, dateOf) {

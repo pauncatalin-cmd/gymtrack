@@ -1,6 +1,8 @@
-import {createBackup, createStorage, historyTotals, parseBackup, planImport} from './backup.js?v=14';
+import {createBackup, createStorage, historyTotals, parseBackup, planImport} from './backup.js?v=15';
 import {bestSet, betterSet, exerciseTimeline, filterHistory, localDay, loggedSet, MACHINE_DEFAULTS,
- MACHINE_DEFAULTS_VERSION, machineProgramUpdate, prefillDraft, programLabel, setNumber, workoutDate} from './workouts.js?v=14';
+ MACHINE_DEFAULTS_VERSION, machineProgramUpdate, prefillDraft, programLabel, setNumber, workoutDate} from './workouts.js?v=15';
+import {CARDIO_MODES, DEFAULT_WEEKLY_GOAL, MAX_WEEKLY_GOAL, estimateEnergy, latestWeight, sessionHighlights,
+ weeklyStats} from './fitness.js?v=15';
 
 const DEFAULT_EX=[
  {type:'cardio',name:'Alergare pe bandă',muscle:'Încălzire',minutes:10,guide:'Aleargă 10 minute într-un ritm confortabil. Scopul este să te încălzești pentru antrenament.'},
@@ -42,10 +44,56 @@ function workoutPending(){return activeStart()>0||Object.keys(D()).length>0}
 function switchProgram(id){if(workoutPending()){alert('Termină sau anulează antrenamentul curent înainte să schimbi programul.');renderProgramSelect();return}if(saveFields({activeProgramId:id})){refreshProgram();home()}else renderProgramSelect()}
 function openProgramManager(){if(workoutPending()){alert('Termină sau anulează antrenamentul curent înainte să modifici programul.');return}renderProgramManager();$('programManager').classList.remove('hidden')}
 function closeProgramManager(){$('programManager').classList.add('hidden')}
-function renderProgramManager(){let a=activeProgram();$('managerProgramName').textContent=a.name;$('programExerciseList').innerHTML=a.exercises.length?a.exercises.map((e,i)=>`<div class="programExerciseRow"><div><b>${i+1}. ${escapeHtml(e.name)}</b><span>${escapeHtml(e.muscle||'')} · ${e.type==='cardio'?(e.minutes||10)+' min':(e.sets||3)+' × '+escapeHtml(e.reps||'10-12')}</span></div><div class="exerciseRowActions">${e.type==='cardio'?'':`<div class="seriesControl"><button data-series-minus="${i}" aria-label="Scade o serie">−</button><b>${e.sets||3} serii</b><button data-series-plus="${i}" aria-label="Adaugă o serie">+</button></div>`}<button data-del-ex="${i}" class="rowDelete">Șterge</button></div></div>`).join(''):'<p class="muted">Programul nu are încă exerciții.</p>';$('programExerciseList').querySelectorAll('[data-del-ex]').forEach(b=>b.onclick=()=>deleteExercise(Number(b.dataset.delEx)));$('programExerciseList').querySelectorAll('[data-series-minus]').forEach(b=>b.onclick=()=>changeExerciseSets(Number(b.dataset.seriesMinus),-1));$('programExerciseList').querySelectorAll('[data-series-plus]').forEach(b=>b.onclick=()=>changeExerciseSets(Number(b.dataset.seriesPlus),1));$('deleteProgramBtn').style.display=(a.id==='full-body'||programs().length===1)?'none':'block'}
+function renderProgramManager(){
+ const program=activeProgram();
+ const list=$('programExerciseList');
+ $('managerProgramName').textContent=program.name;
+ list.innerHTML=program.exercises.map((exercise,index)=>{
+  const name=escapeHtml(exercise.name);
+  const cardio=exercise.type==='cardio';
+  const prescription=cardio?`${exercise.minutes||10} min`:`${exercise.sets||MACHINE_DEFAULTS.sets} × ${escapeHtml(exercise.reps||'10-12')}`;
+  const strengthControls=cardio?'':`<div class="seriesControl"><button data-series-minus="${index}" aria-label="Scade o serie">−</button><b>${exercise.sets||MACHINE_DEFAULTS.sets} serii</b><button data-series-plus="${index}" aria-label="Adaugă o serie">+</button></div><label class="exerciseRest">Pauză (sec)<input data-rest-index="${index}" type="number" inputmode="numeric" min="0" step="1" value="${exercise.rest??90}" aria-label="Pauză în secunde pentru ${name}"></label>`;
+  return `<div class="programExerciseRow"><div><b>${index+1}. ${name}</b><span>${escapeHtml(exercise.muscle||'')} · ${prescription}</span></div><div class="exerciseRowActions">${strengthControls}<div class="exerciseMove"><button data-move-index="${index}" data-direction="-1" aria-label="Mută mai sus: ${name}" ${index===0?'disabled':''}>↑</button><button data-move-index="${index}" data-direction="1" aria-label="Mută mai jos: ${name}" ${index===program.exercises.length-1?'disabled':''}>↓</button><button data-del-ex="${index}" class="rowDelete">Șterge</button></div></div></div>`;
+ }).join('')||'<p class="muted">Programul nu are încă exerciții.</p>';
+ list.querySelectorAll('[data-del-ex]').forEach(button=>button.onclick=()=>deleteExercise(Number(button.dataset.delEx)));
+ list.querySelectorAll('[data-series-minus]').forEach(button=>button.onclick=()=>changeExerciseSets(Number(button.dataset.seriesMinus),-1));
+ list.querySelectorAll('[data-series-plus]').forEach(button=>button.onclick=()=>changeExerciseSets(Number(button.dataset.seriesPlus),1));
+ list.querySelectorAll('[data-move-index]').forEach(button=>button.onclick=()=>moveExercise(Number(button.dataset.moveIndex),Number(button.dataset.direction)));
+ list.querySelectorAll('[data-rest-index]').forEach(input=>input.onchange=()=>changeExerciseRest(Number(input.dataset.restIndex),input));
+ $('deleteProgramBtn').style.display=(program.id==='full-body'||programs().length===1)?'none':'block';
+}
+
+function moveExercise(index,direction){
+ if(workoutPending())return;
+ const all=programs();
+ const program=all.find(item=>item.id===activeProgram().id);
+ const destination=index+direction;
+ if(!program.exercises[index]||!program.exercises[destination])return;
+ const [exercise]=program.exercises.splice(index,1);
+ program.exercises.splice(destination,0,exercise);
+ if(!savePrograms(all))return;
+ renderProgramManager();
+ const buttons=$('programExerciseList').querySelectorAll(`[data-move-index="${destination}"]:not(:disabled)`);
+ (Array.from(buttons).find(button=>Number(button.dataset.direction)===direction)??buttons[0])?.focus();
+}
+
+function changeExerciseRest(index,input){
+ if(workoutPending())return;
+ const all=programs();
+ const exercise=all.find(item=>item.id===activeProgram().id).exercises[index];
+ const seconds=input.valueAsNumber;
+ const previous=exercise.rest??90;
+ if(!Number.isSafeInteger(seconds)||seconds<0){
+  alert('Introdu un număr întreg de secunde. Pentru fără pauză, folosește 0.');
+  input.value=previous;
+  return;
+ }
+ exercise.rest=seconds;
+ if(!savePrograms(all))input.value=previous;
+}
 function createProgram(){let name=prompt('Cum se numește noul antrenament? De exemplu: Upper Body');if(!name||!name.trim())return;let p=programs(),id='program-'+Date.now();p.push({id,name:name.trim(),machineDefaults:MACHINE_DEFAULTS_VERSION,exercises:[]});if(!saveFields({programs:p,activeProgramId:id}))return;refreshProgram();renderProgramManager();home()}
 function deleteProgram(){const snapshot=storage.snapshot(),{programs,activeProgramId}=snapshot.data;let a=programs.find(p=>p.id===activeProgramId);if(a.id==='full-body'||programs.length===1)return;if(!confirm(`Ștergi programul „${a.name}”? Istoricul antrenamentelor deja făcute rămâne salvat.`))return;let p=programs.filter(x=>x.id!==a.id);if(!saveFields({programs:p,activeProgramId:p[0].id},snapshot))return;refreshProgram();renderProgramManager();home()}
-function addExerciseToProgram(){let name=$('newExName').value.trim(),muscle=$('newExMuscle').value.trim(),type=$('newExType').value;if(!name){alert('Scrie numele exercițiului sau aparatului.');return}let e;if(type==='cardio'){e={type:'cardio',name,muscle:muscle||'Cardio',minutes:Math.max(1,Number($('newExMinutes').value)||10),guide:$('newExGuide').value.trim()||'Execută exercițiul într-un ritm controlat.'}}else{e={name,sub:$('newExSub').value.trim(),muscle:muscle||'Altele',image:'assets/kip-training-logo.png',sets:Math.max(1,Number($('newExSets').value)||MACHINE_DEFAULTS.sets),reps:$('newExReps').value.trim()||'10-12',weight:$('newExWeight').value.trim()||MACHINE_DEFAULTS.weight,rest:Math.max(0,Number($('newExRest').value)||90),guide:$('newExGuide').value.trim()||'Execută mișcarea controlat și păstrează tehnica corectă.'}}let p=programs(),a=p.find(x=>x.id===activeProgram().id);a.exercises.push(e);if(!savePrograms(p))return;['newExName','newExSub','newExMuscle','newExGuide'].forEach(id=>$(id).value='');$('newExSets').value=MACHINE_DEFAULTS.sets;$('newExWeight').value=MACHINE_DEFAULTS.weight;renderProgramManager();home()}
+function addExerciseToProgram(){let name=$('newExName').value.trim(),muscle=$('newExMuscle').value.trim(),type=$('newExType').value;if(!name){alert('Scrie numele exercițiului sau aparatului.');return}let e;if(type==='cardio'){e={type:'cardio',name,muscle:muscle||'Cardio',minutes:Math.max(1,Number($('newExMinutes').value)||10),guide:$('newExGuide').value.trim()||'Execută exercițiul într-un ritm controlat.'}}else{e={name,sub:$('newExSub').value.trim(),muscle:muscle||'Altele',image:'assets/kip-training-logo.png',sets:Math.max(1,Number($('newExSets').value)||MACHINE_DEFAULTS.sets),reps:$('newExReps').value.trim()||'10-12',weight:$('newExWeight').value.trim()||MACHINE_DEFAULTS.weight,rest:$('newExRest').value===''?90:Math.max(0,Math.round(Number($('newExRest').value))),guide:$('newExGuide').value.trim()||'Execută mișcarea controlat și păstrează tehnica corectă.'}}let p=programs(),a=p.find(x=>x.id===activeProgram().id);a.exercises.push(e);if(!savePrograms(p))return;['newExName','newExSub','newExMuscle','newExGuide'].forEach(id=>$(id).value='');$('newExSets').value=MACHINE_DEFAULTS.sets;$('newExWeight').value=MACHINE_DEFAULTS.weight;renderProgramManager();home()}
 function deleteExercise(i){const snapshot=storage.snapshot(),{programs,activeProgramId}=snapshot.data;let a=programs.find(x=>x.id===activeProgramId),e=a.exercises[i];if(!e||!confirm(`Ștergi „${e.name}” din acest program?`))return;a.exercises.splice(i,1);if(!saveFields({programs},snapshot))return;refreshProgram();renderProgramManager();home()}
 function changeExerciseSets(i,delta){let p=programs(),a=p.find(x=>x.id===activeProgram().id),e=a?.exercises?.[i];if(!e||e.type==='cardio')return;let current=Math.max(1,Number(e.sets)||3),next=Math.max(1,Math.min(12,current+delta));if(next===current)return;e.sets=next;if(!savePrograms(p))return;renderProgramManager();home()}
 
@@ -62,6 +110,74 @@ function humanTime(sec){let m=Math.round(sec/60);if(m<60)return `${m} min`;let h
 
 function formatKg(n){let v=Math.round(Number(n||0));try{return v.toLocaleString('ro-RO')+' kg'}catch{return String(v)+' kg'}}
 function setText(id,value){let el=$(id);if(el)el.textContent=value}
+function renderTrend(id,measurements,title){
+ const box=$(id);
+ if(!measurements.length){box.replaceChildren();return}
+ const width=280,height=92,pad=12,min=Math.min(...measurements),max=Math.max(...measurements);
+ const points=measurements.map((value,i)=>[
+  measurements.length===1?width/2:pad+i*(width-2*pad)/(measurements.length-1),
+  min===max?height/2:height-pad-(value-min)/(max-min)*(height-2*pad),
+ ]);
+ box.innerHTML=`<small>${escapeHtml(title)}</small><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}"><polyline points="${points.map(point=>point.join(',')).join(' ')}" class="chartLine"/>${points.map(([x,y])=>`<circle cx="${x}" cy="${y}" r="4"/>`).join('')}</svg>`;
+}
+
+function renderWeekly(history){
+ const goal=storage.get('weeklyGoal')??DEFAULT_WEEKLY_GOAL;
+ const week=weeklyStats(history,new Date());
+ setText('weeklyGoalStatus',`${week.workouts} din ${goal} antrenamente`);
+ $('weeklyGoalBar').max=goal;
+ $('weeklyGoalBar').value=Math.min(week.workouts,goal);
+ setText('weeklyCalories',week.estimates?`~ ${week.kcal.toLocaleString('ro-RO')} kcal`:'–');
+ setText('weeklyCaloriesNote',week.estimates?`Estimări pentru ${week.estimates} din ${week.workouts} sesiuni`:'Estimarea apare după prima sesiune calculată');
+}
+
+function renderWeightLog(){
+ const entries=(storage.get('weightLog')??[]).sort((a,b)=>a.date.localeCompare(b.date)||a.recordedAt-b.recordedAt);
+ renderTrend('weightTrend',entries.slice(-30).map(entry=>entry.kg),'Greutate corporală · ultimele 30 de măsurători');
+ $('weightEntries').innerHTML=entries.length?entries.slice().reverse().map(entry=>
+  `<li><span>${escapeHtml(isoDateToRo(entry.date))}</span><b>${entry.kg.toLocaleString('ro-RO')} kg</b></li>`
+ ).join(''):'<li class="muted">Adaugă prima măsurătoare.</li>';
+}
+
+function openFitnessSettings(){
+ const today=localDay(new Date());
+ const latest=latestWeight(storage.get('weightLog')??[],today);
+ $('appSettings').open=false;
+ $('weeklyGoalInput').value=storage.get('weeklyGoal')??DEFAULT_WEEKLY_GOAL;
+ $('bodyWeightDate').max=today;
+ $('bodyWeightDate').value=today;
+ $('bodyWeightInput').value='';
+ setText('fitnessStatus',latest?`Ultima greutate: ${latest.kg.toLocaleString('ro-RO')} kg`:'');
+ renderWeightLog();
+ $('fitnessDialog').showModal();
+}
+
+function saveWeeklyGoal(event){
+ event.preventDefault();
+ const goal=$('weeklyGoalInput').valueAsNumber;
+ if(!Number.isSafeInteger(goal)||goal<1||goal>MAX_WEEKLY_GOAL)return;
+ if(!saveFields({weeklyGoal:goal}))return;
+ renderWeekly(H());
+ setText('fitnessStatus','Obiectivul săptămânal a fost salvat.');
+}
+
+function saveBodyWeight(event){
+ event.preventDefault();
+ const date=$('bodyWeightDate').value;
+ const kg=setNumber($('bodyWeightInput').value);
+ if(!date||date!==localDay(workoutDate({date}))||date>localDay(new Date())||!Number.isFinite(kg)||kg<=0||kg>1000){
+  setText('fitnessStatus','Verifică data și greutatea în kg.');
+  return;
+ }
+ const snapshot=storage.snapshot();
+ const entries=snapshot.data.weightLog??[];
+ const entry={date,kg,recordedAt:Date.now()};
+ if(!saveFields({weightLog:[...entries,entry]},snapshot))return;
+ $('bodyWeightInput').value='';
+ renderWeightLog();
+ setText('fitnessStatus','Măsurătoarea a fost salvată.');
+}
+
 function renderDashboard(history, totals, recovery){
  // Dashboard-ul citește direct fb-history. O intrare validă nu mai este ignorată doar din cauza formatului datei.
  let h=Array.isArray(history)?history:[],now=new Date(),y=now.getFullYear(),m=now.getMonth();
@@ -153,16 +269,7 @@ function renderExerciseDetails(){
  const history=$('exerciseTimeline');
  const dated=timeline.filter(item=>localDay(item.date));
  const recent=dated.slice(-12);
- if(!recent.length){
-  $('exerciseTrend').replaceChildren();
- }else{
-  const width=280,height=92,pad=12,max=Math.max(...recent.map(item=>item.kg));
-  const points=recent.map((item,i)=>[
-   recent.length===1?width/2:pad+i*(width-2*pad)/(recent.length-1),
-   height-pad-item.kg/max*(height-2*pad),
-  ]);
-  $('exerciseTrend').innerHTML=`<small>Greutatea maximă pe sesiune · ultimele ${recent.length}</small><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Graficul greutății pe sesiuni"><polyline points="${points.map(point=>point.join(',')).join(' ')}" class="chartLine"/>${points.map(([x,y])=>`<circle cx="${x}" cy="${y}" r="4"/>`).join('')}</svg>`;
- }
+ renderTrend('exerciseTrend',recent.map(item=>item.kg),`Greutatea maximă pe sesiune · ultimele ${recent.length}`);
  const rows=timeline.slice().reverse().map(item=>`<li><span>${escapeHtml(localDay(item.date)||'Dată nespecificată')}</span><b>${format(item)}</b></li>`);
  if(recovered){
   rows.push(`<li><span>Ultima din capturi</span><b>${format(capturedLast)}</b></li>`);
@@ -177,6 +284,7 @@ function home(){
  const h=H().map(w=>({...w,volume:calcVolume(w.exercises)||w.volume}));
  const totals=historyTotals(h,recovery,workoutDate);
  renderDashboard(h,totals,recovery);
+ renderWeekly(h);
  $('count').textContent=totals.count;
  $('vol').textContent=(h.at(-1)?.volume||0)+' kg';
  $('totalTime').textContent=humanTime(totals.seconds);
@@ -208,7 +316,8 @@ function renderHistory(history=H()){
   const date=x.date||localDay(workoutDate(x))||'Dată nespecificată';
   const volume=calcVolume(x.exercises)||x.volume||0;
   const exerciseCount=x.exerciseCount??(x.exercises?.length||EX.length);
-  return `<div class="history"><div class="historyInfo"><b>${escapeHtml(date)}</b><span>${escapeHtml(programLabel(x))}</span><span>${x.done??0}/${exerciseCount} exerciții · ${Math.round((x.duration||0)/60)} min · ${volume} kg volum</span></div><div class="historyButtons"><button class="editHistoryBtn" data-history-index="${i}">Editează</button><button class="deleteHistoryBtn" data-history-index="${i}">Șterge</button></div></div>`;
+  const energy=x.energy?` · ~ ${x.energy.kcal} kcal active`:'';
+  return `<div class="history"><div class="historyInfo"><b>${escapeHtml(date)}</b><span>${escapeHtml(programLabel(x))}</span><span>${x.done??0}/${exerciseCount} exerciții · ${Math.round((x.duration||0)/60)} min · ${volume} kg volum${energy}</span></div><div class="historyButtons"><button class="editHistoryBtn" data-history-index="${i}">Editează</button><button class="deleteHistoryBtn" data-history-index="${i}">Șterge</button></div></div>`;
  }).join(''):`<p class="muted">${history.length?'Niciun antrenament pentru filtrele alese.':'Primul antrenament va apărea aici.'}</p>`;
  list.querySelectorAll('.editHistoryBtn').forEach(button=>button.onclick=()=>openHistoryEdit(Number(button.dataset.historyIndex)));
  list.querySelectorAll('.deleteHistoryBtn').forEach(button=>button.onclick=()=>deleteHistoryEntry(Number(button.dataset.historyIndex)));
@@ -276,7 +385,35 @@ function openHistoryEdit(index){let h=H(),w=h[index];if(!w)return;editingHistory
 function closeHistoryEdit(){editingHistoryIndex=null;$('editHistory').classList.add('hidden')}
 function deleteHistoryEntry(index){const snapshot=storage.snapshot(),h=snapshot.data.history;let w=h[index];if(!w)return;if(!confirm(`Ștergi complet antrenamentul din ${w.date}?\n\nAceastă acțiune va elimina ziua din istoric și calendar.`))return;h.splice(index,1);if(saveFields({history:h},snapshot))home()}
 function deleteEditingHistory(){if(editingHistoryIndex===null)return;const snapshot=storage.snapshot(),h=snapshot.data.history;let w=h[editingHistoryIndex];if(!w)return closeHistoryEdit();if(!confirm(`Ștergi COMPLET antrenamentul din ${w.date}?\n\nVa dispărea din istoric, calendar și toate statisticile.`))return;h.splice(editingHistoryIndex,1);if(!saveFields({history:h},snapshot))return;closeHistoryEdit();home()}
-function saveHistoryEdit(){if(editingHistoryIndex===null)return;let date=$('editHistoryDate').value,minutes=Math.round(Number($('editHistoryMinutes').value)),done=Math.round(Number($('editHistoryDone').value));if(!date){alert('Alege data antrenamentului.');return}if(!Number.isFinite(minutes)||minutes<1){alert('Introdu o durată validă în minute.');return}if(!Number.isFinite(done)||done<0||done>EX.length){alert(`Exercițiile efectuate trebuie să fie între 0 și ${EX.length}.`);return}let h=H(),w=h[editingHistoryIndex];if(!w)return closeHistoryEdit();w.date=isoDateToRo(date);w.duration=minutes*60;w.done=done;let parts=date.split('-').map(Number),oldTs=Number(w.timestamp||0),old=oldTs?new Date(oldTs):new Date();let updated=new Date(parts[0],parts[1]-1,parts[2],old.getHours(),old.getMinutes(),old.getSeconds());w.timestamp=updated.getTime();if(!saveFields({history:h}))return;closeHistoryEdit();home()}
+function saveHistoryEdit(){
+ if(editingHistoryIndex===null)return;
+ const history=H();
+ const workout=history[editingHistoryIndex];
+ if(!workout)return closeHistoryEdit();
+ const date=$('editHistoryDate').value;
+ const minutes=Math.round(Number($('editHistoryMinutes').value));
+ const done=Math.round(Number($('editHistoryDone').value));
+ if(!date){alert('Alege data antrenamentului.');return}
+ if(!Number.isFinite(minutes)||minutes<1){alert('Introdu o durată validă în minute.');return}
+ if(!Number.isFinite(done)||done<0||done>EX.length){alert(`Exercițiile efectuate trebuie să fie între 0 și ${EX.length}.`);return}
+ if(workout.energy&&minutes!==Math.round(workout.duration/60)){
+  const cardio=(workout.exercises??[]).flatMap(exercise=>exercise.cardio?[exercise.cardio]:[]);
+  const estimate=estimateEnergy({bodyKg:workout.energy.bodyKg,duration:minutes*60,
+   strength:workout.energy.strengthSeconds>0,cardio});
+  if(!estimate.energy){alert(estimate.reason);return}
+  workout.energy=estimate.energy;
+ }
+ const [year,month,day]=date.split('-').map(Number);
+ const old=workout.timestamp?new Date(workout.timestamp):new Date();
+ const updated=new Date(year,month-1,day,old.getHours(),old.getMinutes(),old.getSeconds());
+ workout.date=isoDateToRo(date);
+ if(minutes!==Math.round(workout.duration/60))workout.duration=minutes*60;
+ workout.done=done;
+ workout.timestamp=updated.getTime();
+ if(!saveFields({history}))return;
+ closeHistoryEdit();
+ home();
+}
 function renderCalendar(){
  const h=H(), y=calDate.getFullYear(),m=calDate.getMonth(), first=new Date(y,m,1), days=new Date(y,m+1,0).getDate(), start=(first.getDay()+6)%7;
  const attended=new Set(h.map(workoutDate).filter(Boolean).filter(d=>d.getFullYear()===y&&d.getMonth()===m).map(d=>d.getDate()));
@@ -298,14 +435,34 @@ function prefillValues(){
  setText('prefillStatus',`Serii precompletate: ${count}. Bifează fiecare serie după ce o faci.`);
 }
 function tick(){let s=activeStart();$('clock').textContent=s?fmt((Date.now()-s)/1000):'00:00'}
+
+function renderCardioCard(card,exercise,draft,index){
+ const options=Object.entries(CARDIO_MODES).map(([mode,data])=>
+  `<option value="${mode}">${escapeHtml(data.label)}</option>`).join('');
+ card.innerHTML=`<div class="head cardioHead"><div><h3>${index+1}. ${escapeHtml(exercise.name)}</h3><b class="badge">${escapeHtml(exercise.muscle)}</b></div><b class="target">${exercise.minutes} MIN</b></div><p>${escapeHtml(exercise.guide)}</p><div class="cardioEntry"><label>Minute efectuate<input class="cardioMinutes" type="number" inputmode="decimal" min="0" step="0.1" placeholder="${exercise.minutes||10}"></label><label>Tip de cardio<select class="cardioMode"><option value="">Alege pentru estimare</option>${options}</select></label></div><div class="actions single"><button class="complete">${draft.done?'Terminat ✓':'Marchează terminat'}</button></div>`;
+ const minutes=card.querySelector('.cardioMinutes');
+ const mode=card.querySelector('.cardioMode');
+ minutes.value=draft.cardioMinutes??'';
+ mode.value=draft.cardioMode??'';
+ const persist=()=>{
+  const current=D();
+  current[index]??={sets:[],done:false,later:false};
+  current[index].cardioMinutes=Number.isFinite(minutes.valueAsNumber)?minutes.valueAsNumber:null;
+  current[index].cardioMode=mode.value;
+  return saveFields({draft:current});
+ };
+ minutes.oninput=persist;
+ mode.onchange=persist;
+ card.querySelector('.complete').onclick=()=>{if(persist())toggleComplete(index)};
+}
+
 function render(){
  let d=D(),box=$('cards');box.innerHTML='';
  EX.forEach((e,i)=>{
   let x=d[i]||{sets:[],done:false,later:false}; if((filter==='todo'&&x.done)||(filter==='done'&&!x.done))return;
   let c=document.createElement('article');c.className='machine'+(x.done?' done':'');
   if(e.type==='cardio'){
-   c.innerHTML=`<div class="head cardioHead"><div><h3>${i+1}. ${escapeHtml(e.name)}</h3><b class="badge">${escapeHtml(e.muscle)}</b></div><b class="target">${e.minutes} MIN</b></div><p>${escapeHtml(e.guide)}</p><div class="cardioTarget"><b>Țintă</b><strong>${e.minutes} minute</strong></div><div class="actions single"><button class="complete">${x.done?'Terminat ✓':'Marchează terminat'}</button></div>`;
-   c.querySelector('.complete').onclick=()=>toggleComplete(i);box.appendChild(c);return;
+   renderCardioCard(c,e,x,i);box.appendChild(c);return;
   }
   let l=last(e.name),rec=record(e.name),ls=l?(l.sets||[]).filter(s=>s?.done).map(s=>`${escapeHtml(s.kg||0)} kg × ${escapeHtml(s.reps||0)}${s.rir!==''&&s.rir!=null?` · RIR ${escapeHtml(s.rir)}`:''}`).join(' · '):'Prima sesiune.';
   let target=e.weight?`${escapeHtml(e.weight)} KG`:'ALEGE KG'; let ph=e.weight||'kg';
@@ -315,22 +472,84 @@ function render(){
    let s=x.sets[j]||{kg:'',reps:'',rir:'',done:false},r=document.createElement('div');r.className='set';r.innerHTML=`<b>${j+1}</b><input inputmode="decimal" placeholder="${escapeHtml(ph)}" value="${escapeHtml(s.kg)}"><input inputmode="numeric" placeholder="${escapeHtml(e.reps)}" value="${escapeHtml(s.reps)}"><input inputmode="numeric" placeholder="RIR" value="${escapeHtml(s.rir)}"><button class="${s.done?'done':''}" aria-label="Bifează setul">${s.done?'✓':'○'}</button>`;
    let ins=r.querySelectorAll('input'),b=r.querySelector('button');
    function persist(){let q=D();q[i]??={sets:[],done:false,later:false};q[i].sets[j]={...q[i].sets[j],kg:ins[0].value,reps:ins[1].value,rir:ins[2].value,done:b.classList.contains('done')};if(!saveFields({draft:q}))return;updateProgress()}
-   ins.forEach(z=>z.oninput=persist); b.onclick=()=>{let was=b.classList.contains('done');b.classList.toggle('done');b.textContent=b.classList.contains('done')?'✓':'○';persist();if(!was&&b.classList.contains('done'))rest(e.rest||90)};sb.appendChild(r);
+   ins.forEach(z=>z.oninput=persist); b.onclick=()=>{let was=b.classList.contains('done');b.classList.toggle('done');b.textContent=b.classList.contains('done')?'✓':'○';persist();const pause=e.rest??90;if(!was&&pause>0)rest(pause)};sb.appendChild(r);
   }
   c.querySelector('.later').onclick=()=>{let q=D();q[i]??={sets:[],done:false,later:false};q[i].later=!q[i].later;if(!saveFields({draft:q}))return;render()}; c.querySelector('.complete').onclick=()=>toggleComplete(i);box.appendChild(c);
  }); updateProgress();
 }
-function updateProgress(){let d=D(),totalSets=EX.filter(e=>e.type!=='cardio').reduce((a,e)=>a+(e.sets||0),0),doneSets=0;EX.forEach((e,i)=>{if(e.type!=='cardio')doneSets+=(d[i]?.sets||[]).filter(s=>s?.done).length});let cardioDone=!!d[0]?.done,totalUnits=totalSets+1,doneUnits=doneSets+(cardioDone?1:0);$('prog').textContent=`Bandă ${cardioDone?'✓':'○'} · ${doneSets}/${totalSets} serii`;$('bar').style.width=(doneUnits/totalUnits*100)+'%'}
+function updateProgress(){
+ const draft=D();
+ let strengthTotal=0,strengthDone=0,cardioTotal=0,cardioDone=0;
+ EX.forEach((exercise,index)=>{
+  if(exercise.type==='cardio'){
+   cardioTotal++;
+   if(draft[index]?.done)cardioDone++;
+   return;
+  }
+  strengthTotal+=exercise.sets||0;
+  strengthDone+=(draft[index]?.sets||[]).filter(set=>set?.done).length;
+ });
+ const cardio=cardioTotal?`Cardio ${cardioDone}/${cardioTotal} · `:'';
+ $('prog').textContent=`${cardio}${strengthDone}/${strengthTotal} serii`;
+ $('bar').style.width=`${(strengthDone+cardioDone)/Math.max(1,strengthTotal+cardioTotal)*100}%`;
+}
 function toggleComplete(i){let q=D();q[i]??={sets:[],done:false,later:false};q[i].done=!q[i].done;q[i].later=false;if(!saveFields({draft:q}))return;render()}
 function rest(s){clearInterval(rt);restRemaining=s;$('rest').classList.remove('hidden');$('restClock').textContent=fmt(restRemaining);rt=setInterval(()=>{restRemaining--;$('restClock').textContent=fmt(restRemaining);if(restRemaining<=0){try{if(navigator.vibrate)navigator.vibrate([250,120,250])}catch{}closeRest()}},1000)}
 function addRest(){restRemaining+=30;$('restClock').textContent=fmt(restRemaining)}
 function closeRest(){clearInterval(rt);$('rest').classList.add('hidden')}
 function cancelWorkout(){if(!confirm('Anulezi antrenamentul curent? Timpul și seriile nesalvate vor fi șterse.'))return;if(!saveFields({draft:{},activeStart:0}))return;clearInterval(timer);clearInterval(rt);$('rest').classList.add('hidden');$('workout').classList.add('hidden');$('home').classList.remove('hidden');home()}
 function finish(){
- let start=activeStart();if(!start)return;let d=D(),duration=Math.floor((Date.now()-start)/1000),volume=0,done=0;
- let exercises=EX.map((e,i)=>{let x=d[i]||{sets:[]};if(x.done)done++;let sets=(x.sets||[]).map(loggedSet);sets.filter(s=>s?.done).forEach(s=>volume+=s.kg*s.reps);return{name:e.name,sets}});
+ const snapshot=storage.snapshot();
+ const {activeStart:start,draft,history,weightLog,recovery}=snapshot.data;
+ if(!start)return;
+ const now=new Date();
+ const duration=Math.max(0,Math.floor((now.getTime()-start)/1000));
+ const cardio=[];
+ let done=0,strength=false;
+ const exercises=EX.map((exercise,index)=>{
+  const entry=draft[index]??{sets:[]};
+  if(entry.done)done++;
+  const sets=entry.sets.map(loggedSet);
+  if(exercise.type==='cardio'&&entry.done){
+   const segment={minutes:entry.cardioMinutes??null,mode:entry.cardioMode??''};
+   cardio.push(segment);
+   return {name:exercise.name,sets,cardio:segment};
+  }
+  if(exercise.type!=='cardio'&&(entry.done||sets.some(set=>set&&(set.done||(set.kg>0&&set.reps>0)))))strength=true;
+  return {name:exercise.name,sets};
+ });
  const program=activeProgram();
- let h=H();h.push({date:new Date().toLocaleDateString('ro-RO'),timestamp:Date.now(),duration,volume:Math.round(volume),done,programId:program.id,programName:program.name,exerciseCount:EX.length,exercises});if(!saveFields({history:h,draft:{},activeStart:0}))return;clearInterval(timer);$('workout').classList.add('hidden');$('home').classList.remove('hidden');home();alert(`Antrenament salvat!\n${done}/${EX.length} exerciții\n${Math.round(duration/60)} minute\n${Math.round(volume)} kg volum`)
+ const weight=latestWeight(weightLog??[],localDay(now));
+ const estimate=estimateEnergy({bodyKg:weight?.kg,duration,strength,cardio});
+ const workout={date:now.toLocaleDateString('ro-RO'),timestamp:now.getTime(),duration,volume:calcVolume(exercises),
+  done,programId:program.id,programName:program.name,exerciseCount:EX.length,exercises};
+ if(estimate.energy)workout.energy=estimate.energy;
+ if(!saveFields({history:[...history,workout],draft:{},activeStart:0},snapshot))return;
+ clearInterval(timer);
+ closeRest();
+ $('workout').classList.add('hidden');
+ $('home').classList.remove('hidden');
+ home();
+ showSessionSummary(workout,history,recovery,estimate);
+}
+
+function showSessionSummary(workout,history,recovery,estimate){
+ setText('summaryProgram',workout.programName);
+ setText('summaryDuration',humanTime(workout.duration));
+ setText('summaryVolume',formatKg(workout.volume));
+ setText('summaryCalories',workout.energy?`~ ${workout.energy.kcal.toLocaleString('ro-RO')} kcal`:'–');
+ setText('summaryExercises',`${workout.done}/${workout.exerciseCount}`);
+ const prior=filterHistory(history,{to:localDay(workoutDate(workout))}).find(({workout:item})=>
+  item.programId?item.programId===workout.programId:item.programName===workout.programName)?.workout;
+ const difference=prior?workout.volume-(calcVolume(prior.exercises)||prior.volume||0):null;
+ setText('summaryComparison',difference===null?'':`${difference>0?'+':''}${formatKg(difference)} față de ultima sesiune din acest program.`);
+ setText('summaryEnergyNote',estimate.reason??'Estimare pe baza greutății și a duratei cronometrate.');
+ $('summaryHighlights').innerHTML=sessionHighlights(workout,history,recovery?.exercises).map(item=>{
+  const format=set=>`${set.kg.toLocaleString('ro-RO')} kg × ${set.reps}`;
+  const previous=item.previous?` · înainte ${format(item.previous)}`:'';
+  return `<li><b>${escapeHtml(item.name)}</b><span>${format(item.current)}${previous}</span>${item.record?'<small>Record nou</small>':''}</li>`;
+ }).join('');
+ $('sessionSummary').showModal();
 }
 refreshProgram();$('programSelect').onchange=e=>switchProgram(e.target.value);$('managePrograms').onclick=openProgramManager;$('closeProgramManager').onclick=closeProgramManager;$('createProgramBtn').onclick=createProgram;$('deleteProgramBtn').onclick=deleteProgram;$('addExerciseBtn').onclick=addExerciseToProgram;$('newExType').onchange=e=>{$('cardioFields').classList.toggle('hidden',e.target.value!=='cardio');$('strengthFields').classList.toggle('hidden',e.target.value==='cardio')};$('addHistoryBtn').onclick=openAddHistory;$('cancelAddHistory').onclick=closeAddHistory;$('saveAddHistory').onclick=saveAddedHistory;$('exportBackup').onclick=exportBackup;$('importBackup').onclick=()=>$('backupFile').click();$('backupFile').onchange=e=>{let f=e.target.files?.[0];if(f)importBackupFile(f);e.target.value=''};$('cancelHistoryEdit').onclick=closeHistoryEdit;$('saveHistoryEdit').onclick=saveHistoryEdit;$('deleteHistoryFromEdit').onclick=deleteEditingHistory;$('start').onclick=start;$('resetTimer').onclick=()=>{if(confirm('Resetezi timpul antrenamentului la 00:00?')){if(saveFields({activeStart:Date.now()}))tick()}};$('cancelWorkout').onclick=cancelWorkout;$('back').onclick=()=>{$('workout').classList.add('hidden');$('home').classList.remove('hidden');home()};$('finish').onclick=finish;$('skip').onclick=closeRest;$('plus30').onclick=addRest;
 $('prevMonth').onclick=()=>{calDate=new Date(calDate.getFullYear(),calDate.getMonth()-1,1);renderCalendar()};$('nextMonth').onclick=()=>{calDate=new Date(calDate.getFullYear(),calDate.getMonth()+1,1);renderCalendar()};
@@ -340,5 +559,10 @@ $('prefillValues').onclick=prefillValues;
 $('openExerciseProgress').onclick=openExerciseDetails;
 $('progressExercise').onchange=renderExerciseDetails;
 $('closeExerciseProgress').onclick=()=>$('exerciseProgressDialog').close();
+$('openFitness').onclick=openFitnessSettings;
+$('closeFitness').onclick=()=>$('fitnessDialog').close();
+$('weeklyGoalForm').onsubmit=saveWeeklyGoal;
+$('bodyWeightForm').onsubmit=saveBodyWeight;
+$('closeSummary').onclick=()=>$('sessionSummary').close();
 document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-f]').forEach(x=>x.classList.remove('active'));b.classList.add('active');filter=b.dataset.f;render()});
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./service-worker.js').catch(error=>console.error('Service worker',error));home();

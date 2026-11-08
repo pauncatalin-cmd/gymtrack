@@ -148,3 +148,19 @@ test('screenshot recovery preserves totals and exercise progress without adding 
   assert.deepEqual(historyTotals([...restored.history, later], restored.recovery, dateOf),
     {count: 5, seconds: 30600, summarizedCount: 3});
 });
+
+test('fitness preferences, measurements and calorie estimates survive export and repeatable import', () => {
+  const weight = {date: '2026-08-12', kg: 80, recordedAt: localWorkout.timestamp};
+  const energy = {kcal: 100, bodyKg: 80, strengthSeconds: 1800, cardioSeconds: 0, method: 'met-active-v1'};
+  const {store} = fixture();
+  store.update({weeklyGoal: 4, weightLog: [weight], history: [{...localWorkout, energy}]});
+  const source = store.snapshot().data;
+  const imported = parseBackup(JSON.stringify(createBackup(source)));
+  assert.deepEqual(imported, source);
+  const local = {...fixture().store.snapshot().data, weeklyGoal: 2};
+  const merged = planImport(local, imported, defaults);
+  assert.equal(merged.weeklyGoal, 2);
+  assert.deepEqual(merged.weightLog, [weight]);
+  assert.deepEqual(merged.history[0].energy, energy);
+  assert.deepEqual(planImport(merged, imported, defaults), merged);
+});
