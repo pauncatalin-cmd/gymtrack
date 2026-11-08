@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {exerciseTimeline, filterHistory, loggedSet, machineProgramUpdate, prefillDraft} from './workouts.js';
+import {exerciseProgress, exerciseTimeline, filterHistory, loggedSet, machineProgramUpdate, prefillDraft} from './workouts.js';
 
 const program = {id: 'full-body', name: 'Full Body', exercises: [
   {name: 'Bandă', type: 'cardio', minutes: 10},
@@ -60,4 +60,22 @@ test('exercise timeline ranks valid completed sets and orders sessions by date',
     entry('07.04.2026', 'Full Body', [null, {kg: 55, reps: 0, done: true}]),
   ];
   assert.deepEqual(exerciseTimeline(history, 'Presă').map(({kg, reps}) => [kg, reps]), [[45, 11], [50, 10]]);
+});
+
+test('recovered first and last performances are usable without exercise logs', () => {
+  const recovery = {through: '2026-04-06', exercises: [{
+    name: 'Presă', first: {kg: 30, repetitions: 14}, last: {kg: 50, repetitions: 12},
+  }]};
+  const old = [entry('05.04.2026', 'Full Body', []), entry('06.04.2026', 'Full Body', [])];
+  const recovered = exerciseProgress(old, 'Presă', recovery);
+  assert.equal(recovered.first, recovered.capturedFirst);
+  assert.equal(recovered.last, recovered.capturedLast);
+  assert.deepEqual(recovered.first, {kg: 30, reps: 14});
+  assert.deepEqual(recovered.last, {kg: 50, reps: 12});
+  assert.deepEqual(recovered.timeline, []);
+  const later = entry('07.04.2026', 'Full Body', [{kg: 52, reps: 10, done: true}]);
+  const updated = exerciseProgress([later, ...old], 'Presă', recovery);
+  assert.deepEqual(updated.first, recovered.first);
+  assert.deepEqual(updated.last, {date: new Date(2026, 3, 7), kg: 52, reps: 10});
+  assert.equal(updated.record, updated.last);
 });

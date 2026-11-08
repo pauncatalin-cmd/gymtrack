@@ -1,4 +1,4 @@
-import {bestSet, betterSet, exerciseTimeline, localDay, workoutDate} from './workouts.js?v=15';
+import {bestSet, betterSet, exerciseTimeline, localDay, workoutDate} from './workouts.js?v=16';
 
 export const DEFAULT_WEEKLY_GOAL = 3;
 export const MAX_WEEKLY_GOAL = 21;

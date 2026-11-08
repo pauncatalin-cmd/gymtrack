@@ -1,8 +1,8 @@
-import {createBackup, createStorage, historyTotals, parseBackup, planImport} from './backup.js?v=15';
-import {bestSet, betterSet, exerciseTimeline, filterHistory, localDay, loggedSet, MACHINE_DEFAULTS,
- MACHINE_DEFAULTS_VERSION, machineProgramUpdate, prefillDraft, programLabel, setNumber, workoutDate} from './workouts.js?v=15';
+import {createBackup, createStorage, historyTotals, parseBackup, planImport} from './backup.js?v=16';
+import {bestSet, exerciseProgress, filterHistory, localDay, loggedSet, MACHINE_DEFAULTS,
+ MACHINE_DEFAULTS_VERSION, machineProgramUpdate, prefillDraft, programLabel, setNumber, workoutDate} from './workouts.js?v=16';
 import {CARDIO_MODES, DEFAULT_WEEKLY_GOAL, MAX_WEEKLY_GOAL, estimateEnergy, latestWeight, sessionHighlights,
- weeklyStats} from './fitness.js?v=15';
+ weeklyStats} from './fitness.js?v=16';
 
 const DEFAULT_EX=[
  {type:'cardio',name:'Alergare pe bandă',muscle:'Încălzire',minutes:10,guide:'Aleargă 10 minute într-un ritm confortabil. Scopul este să te încălzești pentru antrenament.'},
@@ -102,13 +102,12 @@ function H(){return storage.get('history')} function D(){return storage.get('dra
 function calcVolume(exercises){return Math.round((exercises||[]).reduce((total,e)=>total+(e.sets||[]).reduce((sum,s)=>{let kg=setNumber(s?.kg),reps=setNumber(s?.reps);return sum+(Number.isFinite(kg)&&Number.isFinite(reps)&&kg>0&&reps>0?kg*reps:0)},0),0))}
 function fmt(s){s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
 function activeStart(){return storage.get('activeStart')}
-function last(n){let h=H();for(let i=h.length-1;i>=0;i--){let e=(h[i].exercises||[]).find(x=>x.name===n);if(e)return e}}
-function record(name){return exerciseTimeline(H(),name).reduce(betterSet,null)}
 function progression(e,l){if(!l)return 'După primul antrenament îți voi sugera dacă merită să crești greutatea.';let s=(l.sets||[]).filter(x=>x?.done&&Number(x.kg)>0&&Number(x.reps)>0);let required=Math.max(1,Number(e.sets)||3);if(s.length<required)return `Păstrează greutatea și completează toate cele ${required} serii pentru o recomandare.`;let max=Math.max(...s.map(x=>Number(x.kg)||0));let all12=s.every(x=>Number(x.reps)>=12);let allRir2=s.every(x=>x.rir!==''&&x.rir!=null&&Number(x.rir)>=2);let hard=s.some(x=>Number(x.reps)<=10&&(x.rir!==''&&x.rir!=null&&Number(x.rir)<=0));if(all12&&allRir2)return `Progres recomandat: încearcă aproximativ ${max+5} kg data viitoare.`;if(hard)return `Recomandare: păstrează aproximativ ${max} kg până controlezi 10-12 repetări.`;return `Recomandare: păstrează aproximativ ${max} kg și urmărește 12 repetări cu RIR 1-2.`}
 function totalTime(h){return h.reduce((a,x)=>a+Number(x.duration||0),0)}
 function humanTime(sec){let m=Math.round(sec/60);if(m<60)return `${m} min`;let h=Math.floor(m/60),r=m%60;return r?`${h} h ${r} min`:`${h} h`}
 
 function formatKg(n){let v=Math.round(Number(n||0));try{return v.toLocaleString('ro-RO')+' kg'}catch{return String(v)+' kg'}}
+function formatPerformance(set){return set?`${set.kg.toLocaleString('ro-RO')} kg × ${set.reps.toLocaleString('ro-RO')}`:'–'}
 function setText(id,value){let el=$(id);if(el)el.textContent=value}
 function renderTrend(id,measurements,title){
  const box=$(id);
@@ -216,23 +215,11 @@ function renderVolumeChart(h){
 }
 function renderExerciseProgress(history,recovery){
  const rows=[];
- const recoveredByName=new Map(recovery?.exercises.map(exercise=>[exercise.name,exercise]));
- const cutoff=recovery?workoutDate({date:recovery.through}):null;
- cutoff?.setHours(23,59,59,999);
  for(const exercise of EX.filter(item=>item.type!=='cardio')){
-  const recovered=recoveredByName.get(exercise.name);
-  let first=recovered?{kg:recovered.first.kg,reps:recovered.first.repetitions}:null;
-  let last=recovered?{kg:recovered.last.kg,reps:recovered.last.repetitions}:null;
-  for(const workout of history){
-   const date=recovered?workoutDate(workout):null;
-   if(recovered && (!date || date<=cutoff))continue;
-   const logged=(workout.exercises||[]).find(item=>item.name===exercise.name);
-   const performance=bestSet(logged);
-   if(performance){first??=performance;last=performance}
-  }
+  const {first,last}=exerciseProgress(history,exercise.name,recovery);
   if(!last)continue;
   const diff=last.kg-first.kg;
-  rows.push(`<div class="progressRow"><div><b>${escapeHtml(exercise.name)}</b><span>Prima: ${first.kg} kg × ${first.reps} · Ultima: ${last.kg} kg × ${last.reps}</span></div><strong class="${diff>0?'positive':diff<0?'negative':''}">${diff>0?'+':''}${diff} kg</strong></div>`);
+  rows.push(`<div class="progressRow"><div><b>${escapeHtml(exercise.name)}</b><span>Prima: ${formatPerformance(first)} · Ultima: ${formatPerformance(last)}</span></div><strong class="${diff>0?'positive':diff<0?'negative':''}">${diff>0?'+':''}${diff} kg</strong></div>`);
  }
  $('exerciseProgressList').innerHTML=rows.length?rows.join(''):'<p class="muted">Progresul apare după ce salvezi exercițiile.</p>';
 }
@@ -255,25 +242,17 @@ function openExerciseDetails(){
 
 function renderExerciseDetails(){
  const name=$('progressExercise').value;
- const timeline=exerciseTimeline(H(),name);
- const recovery=storage.get('recovery');
- const recovered=recovery?.exercises.find(exercise=>exercise.name===name);
- const capturedLast=recovered?{kg:recovered.last.kg,reps:recovered.last.repetitions}:null;
- const capturedFirst=recovered?{kg:recovered.first.kg,reps:recovered.first.repetitions}:null;
- const best=timeline.reduce(betterSet,betterSet(capturedFirst,capturedLast));
- const format=set=>set?`${set.kg} kg × ${set.reps}`:'–';
- const loggedLatest=timeline.at(-1);
- const latest=(!capturedLast||localDay(loggedLatest?.date)>recovery.through)?loggedLatest:capturedLast;
- setText('exerciseLatest',format(latest));
- setText('exerciseBest',format(best));
+ const {timeline,last,record,capturedFirst,capturedLast}=exerciseProgress(H(),name,storage.get('recovery'));
+ setText('exerciseLatest',formatPerformance(last));
+ setText('exerciseBest',formatPerformance(record));
  const history=$('exerciseTimeline');
  const dated=timeline.filter(item=>localDay(item.date));
  const recent=dated.slice(-12);
  renderTrend('exerciseTrend',recent.map(item=>item.kg),`Greutatea maximă pe sesiune · ultimele ${recent.length}`);
- const rows=timeline.slice().reverse().map(item=>`<li><span>${escapeHtml(localDay(item.date)||'Dată nespecificată')}</span><b>${format(item)}</b></li>`);
- if(recovered){
-  rows.push(`<li><span>Ultima din capturi</span><b>${format(capturedLast)}</b></li>`);
-  rows.push(`<li><span>Prima din capturi</span><b>${format(capturedFirst)}</b></li>`);
+ const rows=timeline.slice().reverse().map(item=>`<li><span>${escapeHtml(localDay(item.date)||'Dată nespecificată')}</span><b>${formatPerformance(item)}</b></li>`);
+ if(capturedFirst){
+  rows.push(`<li><span>Ultima din capturi</span><b>${formatPerformance(capturedLast)}</b></li>`);
+  rows.push(`<li><span>Prima din capturi</span><b>${formatPerformance(capturedFirst)}</b></li>`);
  }
  history.innerHTML=rows.length?rows.join(''):'<li class="muted">Fișa se completează după ce salvezi serii bifate.</li>';
 }
@@ -458,15 +437,25 @@ function renderCardioCard(card,exercise,draft,index){
 
 function render(){
  let d=D(),box=$('cards');box.innerHTML='';
+ const history=H();
+ const recovery=storage.get('recovery');
+ const latestExercises=new Map();
+ for(const {workout} of filterHistory(history,{})){
+  for(const exercise of workout.exercises??[]){
+   if(!latestExercises.has(exercise.name)&&bestSet(exercise))latestExercises.set(exercise.name,exercise);
+  }
+ }
  EX.forEach((e,i)=>{
   let x=d[i]||{sets:[],done:false,later:false}; if((filter==='todo'&&x.done)||(filter==='done'&&!x.done))return;
   let c=document.createElement('article');c.className='machine'+(x.done?' done':'');
   if(e.type==='cardio'){
    renderCardioCard(c,e,x,i);box.appendChild(c);return;
   }
-  let l=last(e.name),rec=record(e.name),ls=l?(l.sets||[]).filter(s=>s?.done).map(s=>`${escapeHtml(s.kg||0)} kg × ${escapeHtml(s.reps||0)}${s.rir!==''&&s.rir!=null?` · RIR ${escapeHtml(s.rir)}`:''}`).join(' · '):'Prima sesiune.';
+  const progress=exerciseProgress(history,e.name,recovery);
+  const previous=progress.capturedLast&&progress.last===progress.capturedLast?null:latestExercises.get(e.name);
+  const tip=!previous&&progress.capturedLast?'Recomandările se actualizează după o sesiune cu serii salvate.':progression(e,previous);
   let target=e.weight?`${escapeHtml(e.weight)} KG`:'ALEGE KG'; let ph=e.weight||'kg';
-  c.innerHTML=`<div class="machineImage"><img src="${escapeHtml(e.image)}" alt="${escapeHtml(e.name)}"></div><div class="head"><div><h3>${i+1}. ${escapeHtml(e.name)}</h3><span class="sub">${escapeHtml(e.sub)}</span><div><b class="badge">${escapeHtml(e.muscle)}</b><b class="rir">Țintă RIR 1-2</b></div></div><b class="target">${target}</b></div><p>${escapeHtml(e.guide)}</p><div class="prescription"><span>Program</span><b>${e.sets} × ${escapeHtml(e.reps)} repetări</b><span>Greutate orientativă</span><b>${e.weight?escapeHtml(e.weight)+' kg':'alege în aparat'}</b></div><div class="last"><b>Ultima dată</b><br>${ls}</div><div class="record"><b>Record personal</b><span>${rec?`${rec.kg} kg × ${rec.reps}`:'Încă nu ai un record.'}</span></div><div class="progressTip">${progression(e,l)}</div><p class="advice">Scrie RIR-ul real după fiecare serie. RIR 2 înseamnă că mai puteai face aproximativ 2 repetări.</p><div class="setshead"><span>Set</span><span>kg</span><span>reps</span><span>RIR</span><span></span></div><div class="sets"></div><div class="actions"><button class="later">${x.later?'Revin aici ✓':'Ocupat · mai târziu'}</button><button class="complete">${x.done?'Terminat ✓':'Marchează terminat'}</button></div>`;
+  c.innerHTML=`<div class="machineImage"><img src="${escapeHtml(e.image)}" alt="${escapeHtml(e.name)}"></div><div class="head"><div><h3>${i+1}. ${escapeHtml(e.name)}</h3><span class="sub">${escapeHtml(e.sub)}</span><div><b class="badge">${escapeHtml(e.muscle)}</b><b class="rir">Țintă RIR 1-2</b></div></div><b class="target">${target}</b></div><p>${escapeHtml(e.guide)}</p><div class="prescription"><span>Program</span><b>${e.sets} × ${escapeHtml(e.reps)} repetări</b><span>Greutate orientativă</span><b>${e.weight?escapeHtml(e.weight)+' kg':'alege în aparat'}</b></div><div class="record"><b>Record din datele disponibile</b><span>${formatPerformance(progress.record)}</span></div><div class="progressTip">${tip}</div><p class="advice">Scrie RIR-ul real după fiecare serie. RIR 2 înseamnă că mai puteai face aproximativ 2 repetări.</p>${workoutProgressMarkup(progress,previous)}<div class="setshead"><span>Set</span><span>kg</span><span>reps</span><span>RIR</span><span></span></div><div class="sets"></div><div class="actions"><button class="later">${x.later?'Revin aici ✓':'Ocupat · mai târziu'}</button><button class="complete">${x.done?'Terminat ✓':'Marchează terminat'}</button></div>`;
   let sb=c.querySelector('.sets');
   for(let j=0;j<e.sets;j++){
    let s=x.sets[j]||{kg:'',reps:'',rir:'',done:false},r=document.createElement('div');r.className='set';r.innerHTML=`<b>${j+1}</b><input inputmode="decimal" placeholder="${escapeHtml(ph)}" value="${escapeHtml(s.kg)}"><input inputmode="numeric" placeholder="${escapeHtml(e.reps)}" value="${escapeHtml(s.reps)}"><input inputmode="numeric" placeholder="RIR" value="${escapeHtml(s.rir)}"><button class="${s.done?'done':''}" aria-label="Bifează setul">${s.done?'✓':'○'}</button>`;
@@ -476,6 +465,14 @@ function render(){
   }
   c.querySelector('.later').onclick=()=>{let q=D();q[i]??={sets:[],done:false,later:false};q[i].later=!q[i].later;if(!saveFields({draft:q}))return;render()}; c.querySelector('.complete').onclick=()=>toggleComplete(i);box.appendChild(c);
  }); updateProgress();
+}
+function workoutProgressMarkup(progress,previous){
+ const metric=(label,value,captured)=>`<div><span>${label}</span><b>${formatPerformance(value)}</b>${captured&&value===captured?'<small>Din capturi</small>':''}</div>`;
+ const sets=previous?.sets?.filter(set=>set?.done).map(set=>
+  `${escapeHtml(set.kg||0)} kg × ${escapeHtml(set.reps||0)}${set.rir!==''&&set.rir!=null?` · RIR ${escapeHtml(set.rir)}`:''}`
+ ).join(' · ');
+ const lastSets=sets?`<p class="workoutPreviousSets"><b>Seriile ultimei sesiuni</b> ${sets}</p>`:'';
+ return `<div class="last workoutHistory"><div class="workoutHistoryValues">${metric('Prima performanță',progress.first,progress.capturedFirst)}${metric('Ultima performanță',progress.last,progress.capturedLast)}</div>${lastSets}</div>`;
 }
 function updateProgress(){
  const draft=D();

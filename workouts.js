@@ -81,6 +81,18 @@ export function exerciseTimeline(history, name) {
   });
 }
 
+export function exerciseProgress(history, name, recovery) {
+  const timeline = exerciseTimeline(history, name);
+  const captured = recovery?.exercises.find(exercise => exercise.name === name);
+  const capturedFirst = captured ? {kg: captured.first.kg, reps: captured.first.repetitions} : null;
+  const capturedLast = captured ? {kg: captured.last.kg, reps: captured.last.repetitions} : null;
+  const latestLogged = timeline.at(-1);
+  const first = capturedFirst ?? timeline[0];
+  const last = !capturedLast || localDay(latestLogged?.date) > recovery.through ? latestLogged : capturedLast;
+  const record = timeline.reduce(betterSet, betterSet(capturedFirst, capturedLast));
+  return {timeline, first, last, record, capturedFirst, capturedLast};
+}
+
 export function prefillDraft(draft, program, history) {
   const sessions = history.filter(workout => {
     if (workout.programId) return workout.programId === program.id;
