@@ -1,6 +1,6 @@
-const CACHE = 'kip-training-v16-exercise-history';
+const CACHE = 'kip-training-v17-exercise-labels';
 const ASSETS = [
-  './', './index.html', './style.css?v=16', './app.js?v=16', './backup.js?v=16', './workouts.js?v=16', './fitness.js?v=16',
+  './', './index.html', './style.css?v=17', './app.js?v=17', './backup.js?v=17', './workouts.js?v=17', './fitness.js?v=17',
   './manifest.json', './icon-192.png', './icon-512.png', './assets/kip-training-logo.png',
 ];
 

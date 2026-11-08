@@ -1,8 +1,8 @@
-import {createBackup, createStorage, historyTotals, parseBackup, planImport} from './backup.js?v=16';
+import {createBackup, createStorage, historyTotals, parseBackup, planImport} from './backup.js?v=17';
 import {bestSet, exerciseProgress, filterHistory, localDay, loggedSet, MACHINE_DEFAULTS,
- MACHINE_DEFAULTS_VERSION, machineProgramUpdate, prefillDraft, programLabel, setNumber, workoutDate} from './workouts.js?v=16';
+ MACHINE_DEFAULTS_VERSION, machineProgramUpdate, prefillDraft, programLabel, setNumber, workoutDate} from './workouts.js?v=17';
 import {CARDIO_MODES, DEFAULT_WEEKLY_GOAL, MAX_WEEKLY_GOAL, estimateEnergy, latestWeight, sessionHighlights,
- weeklyStats} from './fitness.js?v=16';
+ weeklyStats} from './fitness.js?v=17';
 
 const DEFAULT_EX=[
  {type:'cardio',name:'Alergare pe bandă',muscle:'Încălzire',minutes:10,guide:'Aleargă 10 minute într-un ritm confortabil. Scopul este să te încălzești pentru antrenament.'},
@@ -455,7 +455,7 @@ function render(){
   const previous=progress.capturedLast&&progress.last===progress.capturedLast?null:latestExercises.get(e.name);
   const tip=!previous&&progress.capturedLast?'Recomandările se actualizează după o sesiune cu serii salvate.':progression(e,previous);
   let target=e.weight?`${escapeHtml(e.weight)} KG`:'ALEGE KG'; let ph=e.weight||'kg';
-  c.innerHTML=`<div class="machineImage"><img src="${escapeHtml(e.image)}" alt="${escapeHtml(e.name)}"></div><div class="head"><div><h3>${i+1}. ${escapeHtml(e.name)}</h3><span class="sub">${escapeHtml(e.sub)}</span><div><b class="badge">${escapeHtml(e.muscle)}</b><b class="rir">Țintă RIR 1-2</b></div></div><b class="target">${target}</b></div><p>${escapeHtml(e.guide)}</p><div class="prescription"><span>Program</span><b>${e.sets} × ${escapeHtml(e.reps)} repetări</b><span>Greutate orientativă</span><b>${e.weight?escapeHtml(e.weight)+' kg':'alege în aparat'}</b></div><div class="record"><b>Record din datele disponibile</b><span>${formatPerformance(progress.record)}</span></div><div class="progressTip">${tip}</div><p class="advice">Scrie RIR-ul real după fiecare serie. RIR 2 înseamnă că mai puteai face aproximativ 2 repetări.</p>${workoutProgressMarkup(progress,previous)}<div class="setshead"><span>Set</span><span>kg</span><span>reps</span><span>RIR</span><span></span></div><div class="sets"></div><div class="actions"><button class="later">${x.later?'Revin aici ✓':'Ocupat · mai târziu'}</button><button class="complete">${x.done?'Terminat ✓':'Marchează terminat'}</button></div>`;
+  c.innerHTML=`<div class="machineImage"><img src="${escapeHtml(e.image)}" alt="${escapeHtml(e.name)}"></div><div class="head"><div><h3>${i+1}. ${escapeHtml(e.name)}</h3><span class="sub">${escapeHtml(e.sub)}</span><div><b class="badge">${escapeHtml(e.muscle)}</b><b class="rir">Țintă RIR 1-2</b></div></div><b class="target">${target}</b></div><p>${escapeHtml(e.guide)}</p><div class="prescription"><span>Program</span><b>${e.sets} × ${escapeHtml(e.reps)} repetări</b><span>Greutate orientativă</span><b>${e.weight?escapeHtml(e.weight)+' kg':'alege în aparat'}</b></div><div class="record"><b>Record</b><span>${formatPerformance(progress.record)}</span></div><div class="progressTip">${tip}</div><p class="advice">Scrie RIR-ul real după fiecare serie. RIR 2 înseamnă că mai puteai face aproximativ 2 repetări.</p>${workoutProgressMarkup(progress,previous)}<div class="setshead"><span>Set</span><span>kg</span><span>reps</span><span>RIR</span><span></span></div><div class="sets"></div><div class="actions"><button class="later">${x.later?'Revin aici ✓':'Ocupat · mai târziu'}</button><button class="complete">${x.done?'Terminat ✓':'Marchează terminat'}</button></div>`;
   let sb=c.querySelector('.sets');
   for(let j=0;j<e.sets;j++){
    let s=x.sets[j]||{kg:'',reps:'',rir:'',done:false},r=document.createElement('div');r.className='set';r.innerHTML=`<b>${j+1}</b><input inputmode="decimal" placeholder="${escapeHtml(ph)}" value="${escapeHtml(s.kg)}"><input inputmode="numeric" placeholder="${escapeHtml(e.reps)}" value="${escapeHtml(s.reps)}"><input inputmode="numeric" placeholder="RIR" value="${escapeHtml(s.rir)}"><button class="${s.done?'done':''}" aria-label="Bifează setul">${s.done?'✓':'○'}</button>`;
@@ -467,12 +467,12 @@ function render(){
  }); updateProgress();
 }
 function workoutProgressMarkup(progress,previous){
- const metric=(label,value,captured)=>`<div><span>${label}</span><b>${formatPerformance(value)}</b>${captured&&value===captured?'<small>Din capturi</small>':''}</div>`;
+ const metric=(label,value)=>`<div><span>${label}</span><b>${formatPerformance(value)}</b></div>`;
  const sets=previous?.sets?.filter(set=>set?.done).map(set=>
   `${escapeHtml(set.kg||0)} kg × ${escapeHtml(set.reps||0)}${set.rir!==''&&set.rir!=null?` · RIR ${escapeHtml(set.rir)}`:''}`
  ).join(' · ');
  const lastSets=sets?`<p class="workoutPreviousSets"><b>Seriile ultimei sesiuni</b> ${sets}</p>`:'';
- return `<div class="last workoutHistory"><div class="workoutHistoryValues">${metric('Prima performanță',progress.first,progress.capturedFirst)}${metric('Ultima performanță',progress.last,progress.capturedLast)}</div>${lastSets}</div>`;
+ return `<div class="last workoutHistory"><div class="workoutHistoryValues">${metric('Prima performanță',progress.first)}${metric('Ultima performanță',progress.last)}</div>${lastSets}</div>`;
 }
 function updateProgress(){
  const draft=D();

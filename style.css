@@ -49,10 +49,9 @@ header{position:relative;text-align:center}
 .exerciseMove button:disabled{opacity:.35}
 .exerciseRest{width:82px}
 .workoutHistoryValues{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.workoutHistoryValues span,.workoutHistoryValues b,.workoutHistoryValues small{display:block}
+.workoutHistoryValues span,.workoutHistoryValues b{display:block}
 .workoutHistoryValues span{color:var(--muted)}
 .workoutHistoryValues b{margin-top:4px;font-size:15px}
-.workoutHistoryValues small{margin-top:3px;color:var(--muted);font-size:10px;letter-spacing:0}
 .machine .workoutPreviousSets{margin:9px 0 0;font-size:12px}
 @media(max-width:380px){.weeklyHead,.weeklyEnergy{align-items:flex-start;flex-direction:column;gap:5px}.cardioEntry{grid-template-columns:1fr}}
 .cancelWorkout{background:rgba(239,68,68,.12)!important;color:#fca5a5!important;border:1px solid rgba(239,68,68,.3);padding:9px 10px!important;font-size:11px;font-weight:800}.record,.progressTip{background:#0f172a;border-radius:11px;padding:11px;font-size:12px;margin:10px 0}.record{display:flex;justify-content:space-between;gap:10px}.record span{color:var(--yellow);font-weight:900}.progressTip{color:#86efac;font-weight:800;line-height:1.4}.restActions{display:grid;grid-template-columns:1fr 1.3fr;gap:8px}.restActions button{padding:14px 12px}.restActions #plus30{background:var(--card2);color:white;font-weight:900}.timerArea{flex-wrap:wrap;justify-content:flex-end}@media(max-width:430px){.timerArea{gap:6px}.resetTimer,.cancelWorkout{font-size:10px;padding:8px!important}.machineImage{height:220px}}

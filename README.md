@@ -23,7 +23,7 @@ Un fișier de recuperare din capturi poate include un rezumat al perioadei anter
 
 - Aparatele de forță pornesc de la 5 serii și 50 kg orientativ. Actualizarea aplică valorile programelor existente după încheierea unei sesiuni în curs. Valorile anterioare sunt păstrate în arhiva exportului.
 - În antrenament, **Preia valorile de data trecută** completează câmpurile libere din seriile bifate anterior. Seriile precompletate intră în istoric după ce le bifezi.
-- Deasupra câmpurilor pentru serii, fiecare aparat afișează **Prima performanță** și **Ultima performanță**. Valorile recuperate din capturi sunt marcate ca atare și rămân vizibile până când există o performanță mai recentă.
+- Deasupra câmpurilor pentru serii, fiecare aparat afișează **Prima performanță** și **Ultima performanță**, inclusiv valorile recuperate din capturi.
 - **Istoric** permite filtrarea după program și interval și afișarea tuturor paginilor. **Fișă de progres** arată cea mai bună serie pe sesiune, recordul disponibil și valorile păstrate din capturi.
 - În **Setări → Obiectiv și greutate** poți seta obiectivul săptămânal și salva măsurători de greutate. Ambele sunt incluse în backup.
 - **Rezumatul de la final** afișează durata, volumul, comparația cu ultima sesiune din program, recordurile noi și caloriile active estimate. Estimarea folosește ultima greutate disponibilă, timpul cronometrat și, dacă ai bifat cardio, minutele și ritmul introduse. Estimările se însumează pe săptămână pentru sesiunile care au o valoare salvată. Valorile MET sunt din [Compendium of Physical Activities](https://pacompendium.com/adult-compendium/).
